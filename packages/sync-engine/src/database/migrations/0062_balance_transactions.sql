@@ -39,7 +39,4 @@ CREATE TRIGGER handle_updated_at
   FOR EACH ROW EXECUTE FUNCTION set_updated_at();
 
 -- Indexes
-CREATE INDEX IF NOT EXISTS idx_balance_transactions_created ON "stripe"."balance_transactions" ("created");
-CREATE INDEX IF NOT EXISTS idx_balance_transactions_source ON "stripe"."balance_transactions" ("source");
-CREATE INDEX IF NOT EXISTS idx_balance_transactions_type ON "stripe"."balance_transactions" ("type");
-CREATE INDEX IF NOT EXISTS idx_balance_transactions_account_id ON "stripe"."balance_transactions" ("_account_id");
+CREATE INDEX stripe_balance_transactions_created_idx ON "stripe"."balance_transactions" USING btree (created);
