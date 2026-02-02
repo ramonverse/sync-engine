@@ -2,13 +2,13 @@
 -- Balance transactions represent funds moving through your Stripe account
 
 CREATE TABLE IF NOT EXISTS "stripe"."balance_transactions" (
-  "id" text PRIMARY KEY,
   "_raw_data" jsonb NOT NULL,
   "_last_synced_at" timestamptz,
   "_updated_at" timestamptz DEFAULT now(),
   "_account_id" text NOT NULL,
 
-  -- Generated columns from _raw_data
+  -- Generated columns from _raw_data (id must be generated for upsert to work)
+  "id" TEXT GENERATED ALWAYS AS ((_raw_data->>'id')::TEXT) STORED PRIMARY KEY,
   "object" text GENERATED ALWAYS AS ((_raw_data->>'object')::text) STORED,
   "amount" bigint GENERATED ALWAYS AS ((_raw_data->>'amount')::bigint) STORED,
   "available_on" integer GENERATED ALWAYS AS ((_raw_data->>'available_on')::integer) STORED,

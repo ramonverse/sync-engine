@@ -1,11 +1,13 @@
 {
   "name": "@paymentsdb/sync-engine",
-  "version": "0.0.1",
+  "version": "0.0.3",
   "private": false,
   "description": "Stripe Sync Engine to sync Stripe data to Postgres",
   "type": "module",
   "main": "./dist/index.cjs",
-  "bin": "./dist/cli/index.js",
+  "bin": {
+    "sync-engine": "./dist/cli/index.js"
+  },
   "exports": {
     ".": {
       "types": "./dist/index.d.ts",
