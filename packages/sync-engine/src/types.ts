@@ -126,6 +126,7 @@ export type SyncObject =
   | 'payment_method'
   | 'dispute'
   | 'charge'
+  | 'balance_transaction'
   | 'payment_intent'
   | 'plan'
   | 'tax_id'
@@ -152,6 +153,7 @@ export interface SyncBackfill {
   paymentMethods?: Sync
   disputes?: Sync
   charges?: Sync
+  balanceTransactions?: Sync
   taxIds?: Sync
   creditNotes?: Sync
   earlyFraudWarnings?: Sync

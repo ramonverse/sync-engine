@@ -39,6 +39,7 @@ const VALID_SYNC_OBJECTS: SyncObject[] = [
   'payment_method',
   'dispute',
   'charge',
+  'balance_transaction',
   'payment_intent',
   'plan',
   'tax_id',

@@ -458,77 +458,84 @@ export class StripeSync {
       upsertFn: (items, id, bf) => this.upsertInvoices(items as Stripe.Invoice[], id, bf),
       supportsCreatedFilter: true,
     },
+    balance_transaction: {
+      order: 8, // Before charge
+      listFn: (p) => this.stripe.balanceTransactions.list(p),
+      upsertFn: (items, id) =>
+        this.upsertBalanceTransactions(items as Stripe.BalanceTransaction[], id),
+      supportsCreatedFilter: true,
+    },
     charge: {
-      order: 8, // Depends on customer, invoice
+      order: 9, // Depends on customer, invoice
       listFn: (p) => this.stripe.charges.list(p),
       upsertFn: (items, id, bf) => this.upsertCharges(items as Stripe.Charge[], id, bf),
       supportsCreatedFilter: true,
     },
     setup_intent: {
-      order: 9, // Depends on customer
+      order: 10, // Depends on customer
       listFn: (p) => this.stripe.setupIntents.list(p),
       upsertFn: (items, id, bf) => this.upsertSetupIntents(items as Stripe.SetupIntent[], id, bf),
       supportsCreatedFilter: true,
     },
     payment_method: {
-      order: 10, // Depends on customer (special: iterates customers)
+      order: 11, // Depends on customer (special: iterates customers)
       listFn: (p) => this.stripe.paymentMethods.list(p),
       upsertFn: (items, id, bf) =>
         this.upsertPaymentMethods(items as Stripe.PaymentMethod[], id, bf),
       supportsCreatedFilter: false, // Requires customer param, can't filter by created
     },
     payment_intent: {
-      order: 11, // Depends on customer
+      order: 12, // Depends on customer
       listFn: (p) => this.stripe.paymentIntents.list(p),
       upsertFn: (items, id, bf) =>
         this.upsertPaymentIntents(items as Stripe.PaymentIntent[], id, bf),
       supportsCreatedFilter: true,
     },
     tax_id: {
-      order: 12, // Depends on customer
+      order: 13, // Depends on customer
       listFn: (p) => this.stripe.taxIds.list(p),
       upsertFn: (items, id, bf) => this.upsertTaxIds(items as Stripe.TaxId[], id, bf),
       supportsCreatedFilter: false, // taxIds don't support created filter
     },
     credit_note: {
-      order: 13, // Depends on invoice
+      order: 14, // Depends on invoice
       listFn: (p) => this.stripe.creditNotes.list(p),
       upsertFn: (items, id, bf) => this.upsertCreditNotes(items as Stripe.CreditNote[], id, bf),
       supportsCreatedFilter: true, // credit_notes support created filter
     },
     dispute: {
-      order: 14, // Depends on charge
+      order: 15, // Depends on charge
       listFn: (p) => this.stripe.disputes.list(p),
       upsertFn: (items, id, bf) => this.upsertDisputes(items as Stripe.Dispute[], id, bf),
       supportsCreatedFilter: true,
     },
     early_fraud_warning: {
-      order: 15, // Depends on charge
+      order: 16, // Depends on charge
       listFn: (p) => this.stripe.radar.earlyFraudWarnings.list(p),
       upsertFn: (items, id) =>
         this.upsertEarlyFraudWarning(items as Stripe.Radar.EarlyFraudWarning[], id),
       supportsCreatedFilter: true,
     },
     refund: {
-      order: 16, // Depends on charge
+      order: 17, // Depends on charge
       listFn: (p) => this.stripe.refunds.list(p),
       upsertFn: (items, id, bf) => this.upsertRefunds(items as Stripe.Refund[], id, bf),
       supportsCreatedFilter: true,
     },
     checkout_sessions: {
-      order: 17, // Depends on customer (optional)
+      order: 18, // Depends on customer (optional)
       listFn: (p) => this.stripe.checkout.sessions.list(p),
       upsertFn: (items, id) => this.upsertCheckoutSessions(items as Stripe.Checkout.Session[], id),
       supportsCreatedFilter: true,
     },
     // Sigma-backed resources
     subscription_item_change_events_v2_beta: {
-      order: 18,
+      order: 19,
       supportsCreatedFilter: false,
       sigma: SIGMA_INGESTION_CONFIGS.subscription_item_change_events_v2_beta,
     },
     exchange_rates_from_usd: {
-      order: 19,
+      order: 20,
       supportsCreatedFilter: false,
       sigma: SIGMA_INGESTION_CONFIGS.exchange_rates_from_usd,
     },
@@ -1147,6 +1154,7 @@ export class StripeSync {
       setup_intent: 'setup_intents',
       payment_method: 'payment_methods',
       dispute: 'disputes',
+      balance_transaction: 'balance_transactions',
       charge: 'charges',
       payment_intent: 'payment_intents',
       plan: 'plans',
@@ -1897,6 +1905,34 @@ export class StripeSync {
     })
   }
 
+  async syncBalanceTransactions(syncParams?: SyncParams): Promise<Sync> {
+    this.config.logger?.info('Syncing balance_transactions')
+
+    return this.withSyncRun(
+      'balance_transactions',
+      'syncBalanceTransactions',
+      async (cursor, runStartedAt) => {
+        const accountId = await this.getAccountId()
+        const params: Stripe.BalanceTransactionListParams = { limit: 100 }
+
+        if (syncParams?.created) {
+          params.created = syncParams.created
+        } else if (cursor) {
+          params.created = { gte: cursor }
+          this.config.logger?.info(`Incremental sync from cursor: ${cursor}`)
+        }
+
+        return this.fetchAndUpsert(
+          (pagination) => this.stripe.balanceTransactions.list({ ...params, ...pagination }),
+          (items) => this.upsertBalanceTransactions(items, accountId),
+          accountId,
+          'balance_transactions',
+          runStartedAt
+        )
+      }
+    )
+  }
+
   async syncCharges(syncParams?: SyncParams): Promise<Sync> {
     this.config.logger?.info('Syncing charges')
 
@@ -2447,6 +2483,19 @@ export class StripeSync {
       )
       throw error
     }
+  }
+
+  private async upsertBalanceTransactions(
+    balanceTransactions: Stripe.BalanceTransaction[],
+    accountId: string,
+    syncTimestamp?: string
+  ): Promise<Stripe.BalanceTransaction[]> {
+    return this.postgresClient.upsertManyWithTimestampProtection(
+      balanceTransactions,
+      'balance_transactions',
+      accountId,
+      syncTimestamp
+    )
   }
 
   private async upsertCharges(
