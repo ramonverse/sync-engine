@@ -604,11 +604,22 @@ export class StripeSync {
   private async handleChargeEvent(event: Stripe.Event, accountId: string): Promise<void> {
     const { entity: charge, refetched } = await this.fetchOrUseWebhookData(
       event.data.object as Stripe.Charge,
-      (id) => this.stripe.charges.retrieve(id),
+      (id) => this.stripe.charges.retrieve(id, { expand: ['balance_transaction'] }),
       (charge) => charge.status === 'failed' || charge.status === 'succeeded'
     )
 
-    await this.upsertCharges([charge], accountId, false, this.getSyncTimestamp(event, refetched))
+    const syncTimestamp = this.getSyncTimestamp(event, refetched)
+
+    // Extract and upsert expanded balance_transaction
+    if (charge.balance_transaction && typeof charge.balance_transaction === 'object') {
+      await this.upsertBalanceTransactions(
+        [charge.balance_transaction as Stripe.BalanceTransaction],
+        accountId,
+        syncTimestamp
+      )
+    }
+
+    await this.upsertCharges([charge], accountId, false, syncTimestamp)
   }
 
   private async handleCustomerDeletedEvent(
@@ -820,11 +831,23 @@ export class StripeSync {
   private async handleDisputeEvent(event: Stripe.Event, accountId: string): Promise<void> {
     const { entity: dispute, refetched } = await this.fetchOrUseWebhookData(
       event.data.object as Stripe.Dispute,
-      (id) => this.stripe.disputes.retrieve(id),
+      (id) => this.stripe.disputes.retrieve(id, { expand: ['balance_transactions'] }),
       (dispute) => dispute.status === 'won' || dispute.status === 'lost'
     )
 
-    await this.upsertDisputes([dispute], accountId, false, this.getSyncTimestamp(event, refetched))
+    const syncTimestamp = this.getSyncTimestamp(event, refetched)
+
+    // Extract and upsert expanded balance_transactions (disputes have an array)
+    if (dispute.balance_transactions && Array.isArray(dispute.balance_transactions)) {
+      const expandedBalanceTransactions = dispute.balance_transactions.filter(
+        (bt: Stripe.BalanceTransaction) => typeof bt === 'object' && bt !== null
+      )
+      if (expandedBalanceTransactions.length > 0) {
+        await this.upsertBalanceTransactions(expandedBalanceTransactions, accountId, syncTimestamp)
+      }
+    }
+
+    await this.upsertDisputes([dispute], accountId, false, syncTimestamp)
   }
 
   private async handlePaymentIntentEvent(event: Stripe.Event, accountId: string): Promise<void> {
@@ -878,10 +901,21 @@ export class StripeSync {
   private async handleRefundEvent(event: Stripe.Event, accountId: string): Promise<void> {
     const { entity: refund, refetched } = await this.fetchOrUseWebhookData(
       event.data.object as Stripe.Refund,
-      (id) => this.stripe.refunds.retrieve(id)
+      (id) => this.stripe.refunds.retrieve(id, { expand: ['balance_transaction'] })
     )
 
-    await this.upsertRefunds([refund], accountId, false, this.getSyncTimestamp(event, refetched))
+    const syncTimestamp = this.getSyncTimestamp(event, refetched)
+
+    // Extract and upsert expanded balance_transaction
+    if (refund.balance_transaction && typeof refund.balance_transaction === 'object') {
+      await this.upsertBalanceTransactions(
+        [refund.balance_transaction as Stripe.BalanceTransaction],
+        accountId,
+        syncTimestamp
+      )
+    }
+
+    await this.upsertRefunds([refund], accountId, false, syncTimestamp)
   }
 
   private async handleReviewEvent(event: Stripe.Event, accountId: string): Promise<void> {
